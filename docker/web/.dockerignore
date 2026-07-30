@@ -1,0 +1,12 @@
+.git
+.gitignore
+*.md
+README*
+docs/
+terraform/
+*.tf
+*.tfstate*
+.terraform/
+.DS_Store
+node_modules/
+*.log
