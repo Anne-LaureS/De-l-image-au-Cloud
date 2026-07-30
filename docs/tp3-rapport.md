@@ -1,10 +1,10 @@
-# TP3 — De l'image au cloud
+# 🐳 TP3 — De l'image au cloud
 
-Fournisseur choisi : **AWS** (ECR + ECS Fargate)
+☁️ Fournisseur choisi : **AWS** (ECR + ECS Fargate)
 
 ---
 
-## 1. Dockerfile commenté
+## 🅰️ 1. Dockerfile commenté
 
 > Le Dockerfile complet est dans [`docker/web/Dockerfile`](../docker/web/Dockerfile).
 > Résumé des décisions de durcissement :
@@ -22,9 +22,9 @@ Fournisseur choisi : **AWS** (ECR + ECS Fargate)
 
 ---
 
-## 2. `curl -sI` — avant / après durcissement
+## 🔍 2. `curl -sI` — avant / après durcissement
 
-### Avant durcissement (`nginx:1.27` vanilla, `docker run -p 8082:80 nginx:1.27`)
+### ❌ Avant durcissement (`nginx:1.27` vanilla, `docker run -p 8082:80 nginx:1.27`)
 
 ```
 HTTP/1.1 200 OK
@@ -38,7 +38,7 @@ ETag: "67ff9c07-267"
 Accept-Ranges: bytes
 ```
 
-### Après durcissement (`anne-laure/demo-web:0.1.0`)
+### ✅ Après durcissement (`anne-laure/demo-web:0.1.0`)
 
 ```
 HTTP/1.1 200 OK
@@ -71,7 +71,7 @@ disparaît.
 
 ---
 
-## 3. Comparaison des vulnérabilités (Trivy) — alpine vs slim
+## 📊 3. Comparaison des vulnérabilités (Trivy) — alpine vs slim
 
 ### Résultat `anne-laure/demo-web:0.1.0` (base `nginx-unprivileged:1.27-alpine`, alpine 3.21.3)
 
@@ -92,7 +92,7 @@ Détail des paquets concernés :
 | nghttp2-libs | CVE-2026-27135 (DoS HTTP/2) | HIGH | 1.64.0-r0 | 1.68.1 |
 | zlib | CVE-2026-22184 (buffer overflow untgz) | HIGH | 1.3.1-r2 | 1.3.2-r0 |
 
-Point notable : la quasi-totalité des CVE ont un correctif disponible
+**Point notable** : la quasi-totalité des CVE ont un correctif disponible
 (`Fixed Version` renseigné) — la base `1.27-alpine` embarquée dans l'image
 n'a simplement pas encore reçu ces derniers patchs alpine. Un `docker build
 --pull` régulier (ou l'ajout d'un `RUN apk upgrade --no-cache` dans le
@@ -116,7 +116,7 @@ dans l'image alpine : ce sont des dépendances par défaut de l'image
 `bookworm` (souvent héritées de paquets `Recommends`/`Suggests` debian),
 pas des composants nécessaires à nginx.
 
-### Tableau comparatif
+### 📈 Tableau comparatif
 
 | Base | CRITICAL | HIGH | Total CVE | Paquets scannés | Taille disque | Content size |
 |---|---|---|---|---|---|---|
@@ -136,17 +136,19 @@ pas nativement sous musl).
 
 ---
 
-## 4. Push sur un tag immuable — lien avec tj-actions
+## 🔐 4. Push sur un tag immuable — lien avec tj-actions
 
-**Blocage rencontré (compte AWS partagé, utilisateur IAM `simonnet`)** :
+🚧 **Blocage rencontré (compte AWS partagé, utilisateur IAM `simonnet`)** :
 la création du registre ECR (`terraform apply -target=aws_ecr_repository.demo_web`)
 échoue systématiquement :
 
+```
 Error: creating ECR Repository (simonnet/demo-web): operation error ECR: CreateRepository,
 https response error StatusCode: 400, api error AccessDeniedException:
 User: arn:aws:iam::747082607185:user/simonnet is not authorized to perform:
 ecr:CreateRepository on resource: arn:aws:ecr:eu-west-3:747082607185:repository/simonnet/demo-web
 because no identity-based policy allows the ecr:CreateRepository action
+```
 
 Investigation menée pour cerner le périmètre exact du blocage (tests
 successifs, sans deviner de nom de ressource au hasard) :
@@ -159,7 +161,7 @@ successifs, sans deviner de nom de ressource au hasard) :
 | IAM | `CreateRole`, `ListRoles`, `ListAttachedUserPolicies`, `ListUserPolicies` | ❌ `AccessDenied` |
 | ECS | `ListClusters` | ❌ `AccessDenied` |
 
-**Conclusion de l'investigation** : le compte AWS partagé applique un
+🔎 **Conclusion de l'investigation** : le compte AWS partagé applique un
 scope de permissions précis à l'utilisateur `simonnet` — l'ensemble de la
 couche réseau (EC2) est autorisé en création, mais tout ce qui touche à
 l'identité (IAM) et aux conteneurs (ECR, ECS) est explicitement refusé,
@@ -170,13 +172,13 @@ correctement (`terraform plan` aboutit sans erreur) et les ressources
 réseau se créent sans problème ; seul l'appel réel aux API IAM/ECR/ECS est
 rejeté par la politique IAM du compte.
 
-**Ce qui a donc pu être validé** : le module Terraform réseau (VPC, subnet
+✅ **Ce qui a donc pu être validé** : le module Terraform réseau (VPC, subnet
 public, Internet Gateway, route table, security group scopé au seul port
 applicatif 8080) fonctionne de bout en bout et a été appliqué avec succès
 sur le compte partagé (`vpc-07cbe47a143f25607`, `subnet-042a3317440ba6ecd`,
 `sg-05fb31b00fb7b69bd`).
 
-**Ce qui reste bloqué en attente de droits complémentaires** : création du
+⛔ **Ce qui reste bloqué en attente de droits complémentaires** : création du
 registre ECR, des rôles IAM d'exécution/de tâche, et du cluster ECS —
 et donc l'ensemble du test d'immutabilité de tag demandé ci-dessous, qui
 nécessite un push réel sur un registre existant.
@@ -188,14 +190,16 @@ du test d'immutabilité, une fois le registre ECR accessible — logique
 vérifiée sur la configuration Terraform (`image_tag_mutability = "IMMUTABLE"`)
 mais non testée en conditions réelles faute d'accès.*
 
-**Manipulation prévue** : reconstruire l'image (contenu modifié) puis tenter de
+🧪 **Manipulation prévue** : reconstruire l'image (contenu modifié) puis tenter de
 repousser sur le tag `0.1.0` déjà présent sur l'ECR configuré en
 `image_tag_mutability = "IMMUTABLE"`.
+
+[à compléter dès que l'accès ECR est débloqué]
 
 Le push serait **rejeté** par ECR (`ImageTagAlreadyExistsException`) : un tag
 donné, une fois publié, pointe définitivement vers le même digest.
 
-**Lien avec l'incident tj-actions/changed-files (mars 2025)** : l'attaquant
+⚠️ **Lien avec l'incident tj-actions/changed-files (mars 2025)** : l'attaquant
 avait compromis l'action GitHub `tj-actions/changed-files` en modifiant
 rétroactivement le contenu pointé par des tags de versions déjà publiées
 (retag), de sorte que les pipelines CI qui référençaient l'action par tag
@@ -210,7 +214,7 @@ strictement l'octet-pour-octet validé qui est déployé.
 
 ---
 
-## 5. Question de fond — utilisateur non-root & rootfs en lecture seule face à Doki
+## 🦠 5. Question de fond — utilisateur non-root & rootfs en lecture seule face à Doki
 
 **Doki** est un malware Linux/conteneur qui cible en priorité les hôtes
 Docker mal configurés (API Docker exposée sans authentification, socket
@@ -219,7 +223,7 @@ dynamiquement son domaine de commande et contrôle (évitant le blocage par
 liste noire), puis cherche à persister sur l'hôte ou dans le conteneur
 compromis (cron, binaires déposés sur disque, comptes/clés SSH ajoutés).
 
-### Ce que `readonlyRootFilesystem=true` + utilisateur non-root **auraient changé**
+### ✅ Ce que `readonlyRootFilesystem=true` + utilisateur non-root **auraient changé**
 
 - **Pas d'écriture de payload sur le système de fichiers du conteneur** : un
   rootfs en lecture seule empêche le malware de déposer son binaire, un
@@ -234,7 +238,7 @@ compromis (cron, binaires déposés sur disque, comptes/clés SSH ajoutés).
   dans le conteneur ne peut pas facilement installer une persistance
   "container-side" ni pivoter via des outils qu'il aurait déposés sur disque.
 
-### Ce que ces deux mesures **n'auraient pas empêché**
+### ❌ Ce que ces deux mesures **n'auraient pas empêché**
 
 - **La compromission initiale elle-même** : si le vecteur d'entrée de Doki
   est une API Docker exposée sur l'hôte (le cas réel documenté), c'est un
@@ -260,7 +264,7 @@ compromis (cron, binaires déposés sur disque, comptes/clés SSH ajoutés).
   peut toujours écrire dans ces emplacements temporaires, même si cela ne
   survit pas au redémarrage du conteneur.
 
-**Conclusion** : `readonlyRootFilesystem` + utilisateur non-root sont des
+🎯 **Conclusion** : `readonlyRootFilesystem` + utilisateur non-root sont des
 mesures de **confinement post-compromission** efficaces contre la
 persistance et l'altération du conteneur, mais ne remplacent ni le
 filtrage réseau, ni la sécurisation du démon Docker/de l'hôte, ni le
