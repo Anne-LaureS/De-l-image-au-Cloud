@@ -73,15 +73,66 @@ disparaît.
 
 ## 3. Comparaison des vulnérabilités (Trivy) — alpine vs slim
 
+### Résultat `anne-laure/demo-web:0.1.0` (base `nginx-unprivileged:1.27-alpine`, alpine 3.21.3)
+
 ```
-[à compléter : trivy image --severity HIGH,CRITICAL bc/demo-web:0.1.0]
-[à compléter : trivy image --severity HIGH,CRITICAL bc/demo-web:0.1.0-slim]
+Total: 34 (HIGH: 32, CRITICAL: 2)
 ```
 
-| Base | CRITICAL | HIGH | Taille image | Commentaire |
+Détail des paquets concernés :
+
+| Paquet | CVE notables | Sévérité max | Version installée | Version corrigée |
 |---|---|---|---|---|
-| `nginx-unprivileged:1.27-alpine` | [ ] | [ ] | [ ] | |
-| `nginx-unprivileged:1.27-bookworm` (slim) | [ ] | [ ] | [ ] | |
+| libssl3 / libcrypto3 | CVE-2026-31789 (heap overflow X.509 32-bit) | CRITICAL | 3.3.3-r0 | 3.3.7-r0 |
+| libxml2 | CVE-2025-49794/95/96, CVE-2026-6732 | HIGH | 2.13.4-r6 | 2.13.9-r0/r1 |
+| libpng | CVE-2025-64720/65018/66293, CVE-2026-22695/22801/25646 | HIGH | 1.6.47-r0 | 1.6.53→55-r0 |
+| libexpat | CVE-2025-59375, CVE-2026-25210/45186/56131/56408 | HIGH | 2.7.0-r0 | 2.7.2→2.8.2-r0 |
+| c-ares | CVE-2026-33630 (use-after-free) | HIGH | 1.34.5-r0 | 1.34.8-r0 |
+| musl / musl-utils | CVE-2026-40200 (stack-based RCE) | HIGH | 1.2.5-r9 | 1.2.5-r11 |
+| nghttp2-libs | CVE-2026-27135 (DoS HTTP/2) | HIGH | 1.64.0-r0 | 1.68.1 |
+| zlib | CVE-2026-22184 (buffer overflow untgz) | HIGH | 1.3.1-r2 | 1.3.2-r0 |
+
+Point notable : la quasi-totalité des CVE ont un correctif disponible
+(`Fixed Version` renseigné) — la base `1.27-alpine` embarquée dans l'image
+n'a simplement pas encore reçu ces derniers patchs alpine. Un `docker build
+--pull` régulier (ou l'ajout d'un `RUN apk upgrade --no-cache` dans le
+Dockerfile) réduirait déjà une bonne partie de ce total sans changer de
+base.
+
+### Résultat `anne-laure/demo-web:0.1.0-slim` (base `nginx-unprivileged:1.27-bookworm`, debian 12.11)
+
+```
+Total: 118 (HIGH: 106, CRITICAL: 12)
+```
+
+144 paquets scannés (contre 68 sur alpine). Les 12 CRITICAL touchent
+notamment : `libaom3` (CVE-2023-6879, heap-buffer-overflow), `libgnutls30`
+(CVE-2026-33845), `libxml2` (CVE-2024-56171, use-after-free), `libssl3` /
+`openssl` (CVE-2026-31789, la même que sur alpine), `perl-base`
+(CVE-2026-13221), `zlib1g` (CVE-2023-45853). La quasi-totalité de ces
+paquets (codecs image `libaom3`/`libheif1`/`libde265`, `perl-base`,
+`libgssapi-krb5`/`libldap`, `gnutls`) **n'existent tout simplement pas**
+dans l'image alpine : ce sont des dépendances par défaut de l'image
+`bookworm` (souvent héritées de paquets `Recommends`/`Suggests` debian),
+pas des composants nécessaires à nginx.
+
+### Tableau comparatif
+
+| Base | CRITICAL | HIGH | Total CVE | Paquets scannés | Taille disque | Content size |
+|---|---|---|---|---|---|---|
+| `1.27-alpine` (alpine 3.21.3) | 2 | 32 | **34** | 68 | 73.7 MB | 21 MB |
+| `1.27-bookworm` (slim, debian 12.11) | 12 | 106 | **118** | 144 | 279 MB | 72.4 MB |
+
+**Conclusion** : la variante alpine réduit à la fois le nombre de CVE
+(facteur ~3,5) **et** la taille de l'image (facteur ~3,8, que ce soit en
+taille disque ou en "content size") par rapport à la variante debian/slim.
+Ce n'est pas une coïncidence : moins de paquets système embarqués signifie
+mécaniquement moins de code tiers exposé, donc moins de CVE possibles et
+une image plus légère à télécharger/scanner/démarrer. C'est l'argument
+principal en faveur du choix alpine retenu en partie A, au prix d'une base
+musl moins répandue en production que glibc (à mettre en balance selon
+le contexte — certaines applications compilées pour glibc ne fonctionnent
+pas nativement sous musl).
 
 ---
 
