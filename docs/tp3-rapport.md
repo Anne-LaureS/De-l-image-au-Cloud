@@ -24,27 +24,50 @@ Fournisseur choisi : **AWS** (ECR + ECS Fargate)
 
 ## 2. `curl -sI` — avant / après durcissement
 
-### Avant durcissement (image nginx "vanilla", `server_tokens on`, sans en-têtes)
+### Avant durcissement (`nginx:1.27` vanilla, `docker run -p 8082:80 nginx:1.27`)
 
 ```
-[à compléter avec votre sortie réelle : docker run -p 8080:80 nginx:1.27]
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Date: Thu, 30 Jul 2026 20:02:32 GMT
+Content-Type: text/html
+Content-Length: 615
+Last-Modified: Wed, 16 Apr 2025 12:01:11 GMT
+Connection: keep-alive
+ETag: "67ff9c07-267"
+Accept-Ranges: bytes
 ```
 
-### Après durcissement (`bc/demo-web:0.1.0`)
+### Après durcissement (`anne-laure/demo-web:0.1.0`)
 
 ```
-[à compléter avec votre sortie réelle : curl -sI http://localhost:8080 | sort]
+HTTP/1.1 200 OK
+Server: nginx
+Date: Thu, 30 Jul 2026 20:01:21 GMT
+Content-Type: text/html
+Content-Length: 89
+Last-Modified: Thu, 30 Jul 2026 19:53:16 GMT
+Connection: keep-alive
+ETag: "6a6babac-59"
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+Referrer-Policy: no-referrer-when-downgrade
+Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri 'self'
+Permissions-Policy: geolocation=(), microphone=(), camera=()
+Strict-Transport-Security: max-age=63072000; includeSubDomains
+Accept-Ranges: bytes
 ```
 
 **Les six en-têtes de sécurité sont-ils tous présents ?**
-`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`,
+Oui : `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`,
 `Content-Security-Policy`, `Permissions-Policy`, `Strict-Transport-Security`
-— [oui/non, à confirmer sur votre sortie].
+sont tous présents dans la réponse durcie, absents dans la réponse vanilla.
 
 **Le mot `nginx` apparaît-il encore ?**
-Avec `server_tokens off`, l'en-tête `Server` est réduit à `nginx` sans
-numéro de version (le nom du logiciel reste visible : seule la version
-disparaît). [à confirmer sur votre sortie].
+Oui, partiellement : `server_tokens off` supprime uniquement le **numéro de
+version** (`nginx/1.27.5` → `nginx`). Le nom du logiciel reste visible ;
+seule la version — l'information exploitable pour cibler une CVE connue —
+disparaît.
 
 ---
 

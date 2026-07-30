@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# bc/demo-web — image nginx durcie servant une page statique
+# anne-laure/demo-web — image nginx durcie servant une page statique
 #
 # Choix de durcissement (justifiés dans docs/tp3-rapport.md) :
 #  1. Base "nginx-unprivileged" : nginx tourne nativement en tant qu'utilisateur
