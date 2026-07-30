@@ -138,15 +138,61 @@ pas nativement sous musl).
 
 ## 4. Push sur un tag immuable — lien avec tj-actions
 
-**Manipulation** : reconstruire l'image (contenu modifié) puis tenter de
+**Blocage rencontré (compte AWS partagé, utilisateur IAM `simonnet`)** :
+la création du registre ECR (`terraform apply -target=aws_ecr_repository.demo_web`)
+échoue systématiquement :
+
+Error: creating ECR Repository (simonnet/demo-web): operation error ECR: CreateRepository,
+https response error StatusCode: 400, api error AccessDeniedException:
+User: arn:aws:iam::747082607185:user/simonnet is not authorized to perform:
+ecr:CreateRepository on resource: arn:aws:ecr:eu-west-3:747082607185:repository/simonnet/demo-web
+because no identity-based policy allows the ecr:CreateRepository action
+
+Investigation menée pour cerner le périmètre exact du blocage (tests
+successifs, sans deviner de nom de ressource au hasard) :
+
+| Service testé | Action | Résultat |
+|---|---|---|
+| EC2 (VPC, subnet, Internet Gateway, route table, security group) | `Create*` | ✅ Autorisé — toute la couche réseau a été provisionnée avec succès |
+| EC2 | `DescribeVpcs` | ✅ Autorisé |
+| ECR | `CreateRepository`, `DescribeRepositories` | ❌ `AccessDenied` |
+| IAM | `CreateRole`, `ListRoles`, `ListAttachedUserPolicies`, `ListUserPolicies` | ❌ `AccessDenied` |
+| ECS | `ListClusters` | ❌ `AccessDenied` |
+
+**Conclusion de l'investigation** : le compte AWS partagé applique un
+scope de permissions précis à l'utilisateur `simonnet` — l'ensemble de la
+couche réseau (EC2) est autorisé en création, mais tout ce qui touche à
+l'identité (IAM) et aux conteneurs (ECR, ECS) est explicitement refusé,
+indépendamment du nom donné aux ressources (testé avec plusieurs noms de
+repository ECR différents, même résultat systématique). Ce n'est donc pas
+un problème de nommage ou de code Terraform — le plan Terraform se génère
+correctement (`terraform plan` aboutit sans erreur) et les ressources
+réseau se créent sans problème ; seul l'appel réel aux API IAM/ECR/ECS est
+rejeté par la politique IAM du compte.
+
+**Ce qui a donc pu être validé** : le module Terraform réseau (VPC, subnet
+public, Internet Gateway, route table, security group scopé au seul port
+applicatif 8080) fonctionne de bout en bout et a été appliqué avec succès
+sur le compte partagé (`vpc-07cbe47a143f25607`, `subnet-042a3317440ba6ecd`,
+`sg-05fb31b00fb7b69bd`).
+
+**Ce qui reste bloqué en attente de droits complémentaires** : création du
+registre ECR, des rôles IAM d'exécution/de tâche, et du cluster ECS —
+et donc l'ensemble du test d'immutabilité de tag demandé ci-dessous, qui
+nécessite un push réel sur un registre existant.
+
+---
+
+*Le paragraphe ci-dessous documente ce qui **aurait dû** se produire lors
+du test d'immutabilité, une fois le registre ECR accessible — logique
+vérifiée sur la configuration Terraform (`image_tag_mutability = "IMMUTABLE"`)
+mais non testée en conditions réelles faute d'accès.*
+
+**Manipulation prévue** : reconstruire l'image (contenu modifié) puis tenter de
 repousser sur le tag `0.1.0` déjà présent sur l'ECR configuré en
 `image_tag_mutability = "IMMUTABLE"`.
 
-```
-[à compléter avec la sortie réelle du docker push refusé]
-```
-
-Le push est **rejeté** par ECR (`ImageTagAlreadyExistsException`) : un tag
+Le push serait **rejeté** par ECR (`ImageTagAlreadyExistsException`) : un tag
 donné, une fois publié, pointe définitivement vers le même digest.
 
 **Lien avec l'incident tj-actions/changed-files (mars 2025)** : l'attaquant
